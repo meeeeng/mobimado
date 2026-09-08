@@ -682,7 +682,7 @@ function candidates(){
 
     for(const v of variants){
       const rj=recipe(p,v.k,'잔영'), rh=recipe(p,v.k,'해연');
-      const hOK = p!=='무기' || ST.conv || (v.lbl===s.job);
+      const hOK = p!=='무기' || ST.conv || (v.nm===s.job);
       // ① 잔영 추가 (현재 잔영 단계일 때만)
       if(bt==='잔영'){
         for(let add=1; bn+add<=JMAX; add++){
