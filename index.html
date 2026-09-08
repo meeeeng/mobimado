@@ -236,7 +236,8 @@
 <!-- 시세 불러오기 -->
 <div class="card"><div class="body">
   <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
-    <button class="btn" id="loadPrices">거래소 시세 불러오기</button>
+    <button class="btn" id="loadPrices">시세 새로고침</button>
+    <button class="btn" id="resetPrices">수정한 값 되돌리기</button>
     <span class="muted" id="priceInfo">모비라이프 시세를 매시간 받아옵니다.</span>
   </div>
 </div></div>
@@ -270,10 +271,6 @@
       <div class="scroll"><table id="wpnTbl"><thead><tr>
         <th>무기</th><th style="width:120px">잔영 시세</th><th style="width:120px">해연 시세</th>
         <th style="width:44px"></th></tr></thead><tbody></tbody></table></div>
-      <div class="row-add">
-        <div class="fld"><span>무기 추가</span><select id="wpnPick" class="w-l"></select></div>
-        <button class="btn" id="wpnAdd">추가</button>
-      </div>
     </div>
   </div>
 </div></div>
@@ -442,7 +439,7 @@ const defState=()=>{
   return {
     price:Object.fromEntries(MATS.map(m=>[m.id,m.p])),
     armJ:{}, armH:{}, craftK:{비늘:false,가죽:true,천:true},
-    wpn:[{job:'빙결술사',j:'',h:''}], conv:false,
+    wpnJ:{}, wpnH:{}, manual:{}, conv:false,
   craftW:{'대장':false,'목공':true,'매직크래프트':true},
     active:s.id, slots:[s],
   };
@@ -513,7 +510,7 @@ function drawMat(){
       const td=el('td',null,m.g); td.colSpan=3; g.append(td); tb.append(g); }
     const tr=document.createElement('tr');
     const nm=el('td','pname'); nm.innerHTML=`<i class="dot g${m.g}"></i>${m.n}`; tr.append(nm);
-    cell(tr,numInput(ST.price[m.id],v=>{ST.price[m.id]=v===''?0:v;save()}));
+    cell(tr,numInput(ST.price[m.id],v=>{ST.price[m.id]=v===''?0:v;mark('m:'+m.id);save()}));
     cell(tr,numInput(A().own[m.id],v=>{A().own[m.id]=v===''?0:v;save()}));
     tb.append(tr);
   }
@@ -610,8 +607,8 @@ function drawPrices(){
     for(const k of KINDS){
       if(single && k!==KINDS[0]){ const a=el('td','kcol'),b=el('td'); tr.append(a,b); continue; }
       const kk=single?'-':k;
-      cell(tr,numInput(ST.armJ[p+'|'+kk]??'',v=>{ST.armJ[p+'|'+kk]=v;save()},single?'잔영':'-')).className='kcol';
-      cell(tr,numInput(ST.armH[p+'|'+kk]??'',v=>{ST.armH[p+'|'+kk]=v;save()},single?'해연':'-'));
+      cell(tr,numInput(ST.armJ[p+'|'+kk]??'',v=>{ST.armJ[p+'|'+kk]=v;mark('aj:'+p+'|'+kk);save()},single?'잔영':'-')).className='kcol';
+      cell(tr,numInput(ST.armH[p+'|'+kk]??'',v=>{ST.armH[p+'|'+kk]=v;mark('ah:'+p+'|'+kk);save()},single?'해연':'-'));
     }
     tb.append(tr);
   }
@@ -640,26 +637,20 @@ function drawPrices(){
   const cv=document.getElementById('conv'); cv.checked=!!ST.conv;
   cv.onchange=()=>{ST.conv=cv.checked;save()};
 
-  // 무기 시세 표
+  // 무기 시세 표 - 전체 직업
   const wb=document.querySelector('#wpnTbl tbody'); wb.textContent='';
-  ST.wpn.forEach((w,i)=>{
-    const tr=document.createElement('tr');
-    tr.append(el('td','pname',w.job));
-    cell(tr,numInput(w.j,v=>{w.j=v;save()},'-'));
-    cell(tr,numInput(w.h,v=>{w.h=v;save()},'-'));
-    const x=el('button','btn','✕'); x.style.padding='4px 9px';
-    x.addEventListener('click',()=>{ST.wpn.splice(i,1);drawPrices();save()});
-    cell(tr,x); wb.append(tr);
-  });
-  const sel=document.getElementById('wpnPick'); const keep=sel.value;
-  sel.textContent='';
   for(const G of JOBG){
-    const og=document.createElement('optgroup'); og.label=G.g; let n=0;
-    for(const j of G.js){ if(ST.wpn.some(w=>w.job===j))continue;
-      const o=document.createElement('option'); o.value=j; o.textContent=j; og.append(o); n++; }
-    if(n) sel.append(og); }
-  if(keep && [...sel.options].some(o=>o.value===keep)) sel.value=keep;
+    const g=document.createElement('tr'); g.className='grp';
+    const td=el('td',null,G.g); td.colSpan=3; g.append(td); wb.append(g);
+    for(const j of G.js){
+      const tr=document.createElement('tr'); tr.append(el('td','pname',j));
+      cell(tr,numInput(ST.wpnJ[j]??'',v=>{ST.wpnJ[j]=v;mark('wj:'+j);save()},'-'));
+      cell(tr,numInput(ST.wpnH[j]??'',v=>{ST.wpnH[j]=v;mark('wh:'+j);save()},'-'));
+      wb.append(tr);
+    }
+  }
 }
+function mark(k){ (ST.manual=ST.manual||{})[k]=true; }
 
 /* ══ 후보 생성 ══ */
 function candidates(){
@@ -695,20 +686,16 @@ function candidates(){
     // 종류/계열 후보
     let variants;
     if(p==='무기'){
-      variants=ST.wpn.map(w=>({k:JOB2G[w.job], nm:w.job,
-        j:N(w.j),h:N(w.h),
-        craft:!!(ST.craftW||{})[W2S[JOB2G[w.job]]],
-        jOK:ST.conv||w.job===s.job}));
-      // 본인 직업은 시세가 없어도 제작 후보로 항상 포함
-      if(!variants.some(v=>v.nm===s.job)&&JOB2G[s.job])
-        variants.push({k:JOB2G[s.job], nm:s.job, j:0, h:0,
-          craft:!!(ST.craftW||{})[W2S[JOB2G[s.job]]], jOK:true});
-      // 변환 스크롤이 있으면, 제작 기술이 있는 모든 계열을 제작 후보로 포함
-      if(ST.conv) for(const G of GNAME){
-        if(!(ST.craftW||{})[W2S[G]]) continue;
-        if(variants.some(v=>v.k===G&&v.craft)) continue;
-        variants.push({k:G, nm:G.replace(' 계열',''), j:0, h:0, craft:true, jOK:true});
+      variants=[];
+      for(const G of JOBG) for(const j of G.js){
+        const ok=ST.conv||j===s.job;
+        if(!ok) continue;
+        variants.push({k:G.g, nm:j, j:N(ST.wpnJ[j]), h:N(ST.wpnH[j]),
+          craft:!!(ST.craftW||{})[W2S[G.g]], jOK:true});
       }
+      if(!variants.length&&JOB2G[s.job])
+        variants.push({k:JOB2G[s.job], nm:s.job, j:N(ST.wpnJ[s.job]), h:N(ST.wpnH[s.job]),
+          craft:!!(ST.craftW||{})[W2S[JOB2G[s.job]]], jOK:true});
     }
     else if(ARMP.includes(p)) variants=KINDS.map(k=>({k,j:N(ST.armJ[p+'|'+k]),h:N(ST.armH[p+'|'+k]),
         craft:ST.craftK[k],jOK:true}));
@@ -798,10 +785,10 @@ function optimize(cand,goal){
   // 4) 보유 재료를 반영한 국소 개선 (결정적)
   const feas=q=>{ const r=evaluate(cand,q,[],0); return r.gain>=goal ? r.cost : INF; };
   let cur=feas(pk), moved=true, guard=0;
-  while(moved && guard++<60){ moved=false;
+  while(moved && guard++<40){ moved=false;
     for(const p of PARTS){ const old=pk[p]; let bi=old, bv=cur;
-      for(let i=0;i<cand[p].length;i++){ if(i===old)continue;
-        pk[p]=i; const v=feas(pk); if(v<bv-1e-9){bv=v;bi=i;} }
+      for(const o of pruned[p]){ if(o.i===old)continue;
+        pk[p]=o.i; const v=feas(pk); if(v<bv-1e-9){bv=v;bi=o.i;} }
       pk[p]=bi; if(bi!==old){cur=bv;moved=true;} } }
 
   const r=evaluate(cand,pk,[],0);
@@ -897,36 +884,32 @@ async function loadPrices(manual){
     if(manual) info.textContent='시세 파일을 불러오지 못했습니다. 깃허브에 올린 주소에서 열어 주세요.';
     return;
   }
-  if(manual) applyPrices();
-  const t=AUTO.updated||AUTO.fetchedAt;
-  info.textContent='마지막 갱신 '+(t?new Date(t).toLocaleString('ko-KR'):'-');
+  applyPrices();
 }
 function applyPrices(){
   if(!AUTO) return;
-  for(const m in AUTO.mats||{}) if(ST.price[m]!=null) ST.price[m]=AUTO.mats[m];
-  for(const k in AUTO.armJ||{}) ST.armJ[k]=AUTO.armJ[k];
-  for(const k in AUTO.armH||{}) ST.armH[k]=AUTO.armH[k];
-  for(const k in AUTO.accJ||{}) ST.armJ[k+'|-']=AUTO.accJ[k];
-  for(const k in AUTO.accH||{}) ST.armH[k+'|-']=AUTO.accH[k];
-  for(const w of ST.wpn){
-    if(AUTO.wpnJ&&AUTO.wpnJ[w.job]!=null) w.j=AUTO.wpnJ[w.job];
-    if(AUTO.wpnH&&AUTO.wpnH[w.job]!=null) w.h=AUTO.wpnH[w.job];
-  }
+  const M=ST.manual||{};
+  for(const m in AUTO.mats||{}) if(ST.price[m]!=null&&!M['m:'+m]) ST.price[m]=AUTO.mats[m];
+  for(const k in AUTO.armJ||{}) if(!M['aj:'+k]) ST.armJ[k]=AUTO.armJ[k];
+  for(const k in AUTO.armH||{}) if(!M['ah:'+k]) ST.armH[k]=AUTO.armH[k];
+  for(const k in AUTO.accJ||{}) if(!M['aj:'+k+'|-']) ST.armJ[k+'|-']=AUTO.accJ[k];
+  for(const k in AUTO.accH||{}) if(!M['ah:'+k+'|-']) ST.armH[k+'|-']=AUTO.accH[k];
+  for(const j in AUTO.wpnJ||{}) if(!M['wj:'+j]) ST.wpnJ[j]=AUTO.wpnJ[j];
+  for(const j in AUTO.wpnH||{}) if(!M['wh:'+j]) ST.wpnH[j]=AUTO.wpnH[j];
   drawMat(); drawPrices(); save();
+  const n=Object.keys(M).length;
   document.getElementById('priceInfo').textContent=
-    '시세를 적용했습니다. 갱신 '+new Date(AUTO.updated||AUTO.fetchedAt).toLocaleString('ko-KR');
+    '갱신 '+new Date(AUTO.updated||AUTO.fetchedAt).toLocaleString('ko-KR')
+    +(n?`  ·  직접 수정 ${n}개는 유지됩니다`:'');
 }
 document.getElementById('loadPrices').addEventListener('click',()=>loadPrices(true));
+document.getElementById('resetPrices').addEventListener('click',()=>{ ST.manual={}; applyPrices(); });
 
 /* ══ 초기화/렌더 ══ */
 function drawAll(){ drawSlots(); drawMat(); drawPrices(); drawState(); drawExtra(); }
 
 document.querySelectorAll('.card>h2').forEach(h=>h.addEventListener('click',()=>h.parentElement.classList.toggle('closed')));
-document.getElementById('wpnAdd').addEventListener('click',()=>{
-  const v=document.getElementById('wpnPick').value; if(!v)return;
-  const nw={job:v,j:'',h:''};
-  if(AUTO){ if(AUTO.wpnJ?.[v]!=null) nw.j=AUTO.wpnJ[v]; if(AUTO.wpnH?.[v]!=null) nw.h=AUTO.wpnH[v]; }
-  ST.wpn.push(nw); drawPrices(); save(); });
+
 document.getElementById('exAdd').addEventListener('click',()=>{
   A().extras.push({name:'',mr:''}); drawExtra(); save(); });
 for(const k of ['r10','r9'])
@@ -963,9 +946,7 @@ arm(document.getElementById('reset'),'전부 지울까요?',()=>{
            craftK:Object.assign(base.craftK,d.craftK||{}),
            craftW:Object.assign({'대장':false,'목공':true,'매직크래프트':true},d.craftW||{}),
            conv:!!d.conv,
-           wpn:(Array.isArray(d.wpn)&&d.wpn.length
-                 ? d.wpn.map(w=>w.job?w:{job:(GBY[w.g]?.js[0]||'빙결술사'),j:w.j||'',h:w.h||''})
-                 : base.wpn),
+           wpnJ:d.wpnJ||{}, wpnH:d.wpnH||{}, manual:d.manual||{},
            slots:(d.slots||[]).map(x=>Object.assign(newSlot(x.name||'슬롯'),x,
              {own:Object.assign(Object.fromEntries(MID.map(m=>[m,0])),x.own||{}),
               kind:Object.assign(Object.fromEntries(ARMP.map(p=>[p,'천'])),x.kind||{}),
