@@ -354,6 +354,8 @@ function ringAdd(r0,r1,k,grade){
   return LADf(c+k)+LADf(c+k-1);
 }
 const MRmax=p=>p==='반지'?RH(RHMAX)*2:MRat(p,'해연',HMAX);
+const DREK_MR=2240;
+const RV10=300, RV9=210;
 /* 현재 마도저항 값 → (등급, 단계) 역산 */
 function stageOf(p,v){
   v=Number(v)||0;
@@ -498,6 +500,78 @@ function drawMat(){
   }
 }
 
+/* ══ 현재 상태 ══ */
+function drawState(){
+  const s=A(), tb=document.querySelector('#stTbl tbody'); tb.textContent='';
+  const GRP={'무기':'무기','투구':'방어구','목걸이':'장신구'};
+  for(const p of PARTS){
+    if(GRP[p]){ const g=document.createElement('tr'); g.className='grp';
+      const td=el('td',null,GRP[p]); td.colSpan=3; g.append(td); tb.append(g); }
+    if(p==='반지'){
+      if(!Array.isArray(s.ring)) s.ring=[0,0];
+      for(let i=0;i<2;i++){
+        const r=document.createElement('tr');
+        r.append(el('td','pname','반지 '+(i+1)));
+        cell(r,'-');
+        cell(r,numInput(s.ring[i],v=>{ s.ring[i]=v===''?0:Math.min(RH(RHMAX),v);
+          s.mr['반지']=(Number(s.ring[0])||0)+(Number(s.ring[1])||0); updMR(); save(); }));
+        tb.append(r);
+      }
+      continue;
+    }
+    const tr=document.createElement('tr');
+    tr.append(el('td','pname',p));
+    if(p==='무기'){
+      const sel=document.createElement('select');
+      for(const G of JOBG){ const og=document.createElement('optgroup'); og.label=G.g;
+        for(const j of G.js){const o=document.createElement('option');o.value=j;o.textContent=j;og.append(o);}
+        sel.append(og); }
+      sel.value=s.job; sel.addEventListener('change',()=>{s.job=sel.value;save()});
+      cell(tr,sel);
+    }else if(ARMP.includes(p)){
+      const sel=document.createElement('select');
+      for(const k of KINDS){const o=document.createElement('option');o.value=k;o.textContent=k;sel.append(o);}
+      sel.value=s.kind[p]; sel.addEventListener('change',()=>{s.kind[p]=sel.value;save()});
+      cell(tr,sel);
+    }else cell(tr,'-');
+    if(p==='무기'&&s.drek){ const td=el('td','num',F(DREK_MR));
+      td.style.color='var(--gold)'; td.style.fontWeight='700'; tr.append(td); }
+    else cell(tr,numInput(s.mr[p],v=>{s.mr[p]=Math.min(MRmax(p),v===''?0:v);updMR();save()}));
+    tb.append(tr);
+  }
+  document.getElementById('drek').checked=!!s.drek;
+  for(const k of ['r10','r9'])
+    document.getElementById(k).value=(s[k]===''||s[k]==null)?'':s[k];
+  document.getElementById('etc').value=s.etc||0;
+  document.getElementById('goal').value=s.goal??'';
+  updMR();
+}
+function runeMR(){ const s=A(); return N(s.r10)*RV10+N(s.r9)*RV9; }
+function extraMR(){ return A().extras.reduce((a,e)=>a+N(e.mr),0); }
+function curMR(){ const s=A(); let v=N(s.etc)+runeMR()+extraMR();
+  for(const p of PARTS) v+= (p==='무기'&&s.drek)?DREK_MR:(Number(s.mr[p])||0); return v; }
+function reachMR(){ const s=A(); let v=N(s.etc)+(N(s.r10)+N(s.r9))*RV10+extraMR();
+  for(const p of PARTS) v+= (p==='무기'&&s.drek)?DREK_MR:MRmax(p); return v; }
+function updMR(){
+  document.getElementById('rMR').textContent=F(runeMR());
+  document.getElementById('nowMR').textContent=F(curMR());
+  document.getElementById('curMR').textContent='현재 '+F(curMR());
+}
+
+/* ══ 추가 옵션 ══ */
+function drawExtra(){
+  const s=A(), tb=document.querySelector('#exTbl tbody'); tb.textContent='';
+  s.extras.forEach((e,i)=>{
+    const tr=document.createElement('tr');
+    const t=document.createElement('input'); t.type='text'; t.value=e.name||''; t.placeholder='기타';
+    t.addEventListener('input',()=>{e.name=t.value;save()}); cell(tr,t);
+    cell(tr,numInput(e.mr,v=>{e.mr=v;updMR();save()}));
+    const x=el('button','btn','✕'); x.style.padding='4px 9px';
+    x.addEventListener('click',()=>{s.extras.splice(i,1);drawExtra();updMR();save()});
+    cell(tr,x); tb.append(tr);
+  });
+}
+
 /* ══ 완성품 시세 ══ */
 function drawPrices(){
   const t=document.getElementById('armTbl'); t.textContent='';
@@ -509,27 +583,90 @@ function drawPrices(){
   const tb=document.createElement('tbody');
   { const g=document.createElement('tr'); g.className='grp';
     const td=el('td',null,'방어구'); td.colSpan=7; g.append(td); tb.append(g); }
-  for(const p of [...ARMP,'반지','목걸이']){  // 시세는 반지 1행 공용
+  for(const p of [...ARMP,'반지','목걸이']){
+    if(p==='반지'){ const g=document.createElement('tr'); g.className='grp';
+      const td=el('td',null,'장신구'); td.colSpan=7; g.append(td); tb.append(g); }
+    const tr=document.createElement('tr'); tr.append(el('td','pname',p));
+    const single=(p==='목걸이'||p==='반지');
+    for(const k of KINDS){
+      if(single && k!==KINDS[0]){ const a=el('td','kcol'),b=el('td'); tr.append(a,b); continue; }
+      const kk=single?'-':k;
+      cell(tr,numInput(ST.armJ[p+'|'+kk]??'',v=>{ST.armJ[p+'|'+kk]=v;save()},single?'잔영':'-')).className='kcol';
+      cell(tr,numInput(ST.armH[p+'|'+kk]??'',v=>{ST.armH[p+'|'+kk]=v;save()},single?'해연':'-'));
+    }
+    tb.append(tr);
+  }
+  t.append(tb);
+
+  // 방어구 제작 기술
+  const host=document.getElementById('craftKHost2'); host.textContent='';
+  for(const sk in ASKILL){
+    const k=ASKILL[sk];
+    const l=el('label','ck'); l.style.marginRight='18px';
+    const c=document.createElement('input'); c.type='checkbox';
+    c.checked=!!ST.craftK[k]; c.addEventListener('change',()=>{ST.craftK[k]=c.checked;save()});
+    l.append(c,document.createTextNode(sk)); host.append(l);
+  }
+  // 무기 제작 기술
+  const wh=document.getElementById('craftWHost'); wh.textContent='';
+  if(!ST.craftW) ST.craftW={'대장':false,'목공':true,'매직크래프트':true};
+  for(const sk in WSKILL){
+    const l=el('label','ck'); l.style.marginRight='18px';
+    const c=document.createElement('input'); c.type='checkbox';
+    c.checked=!!ST.craftW[sk]; c.addEventListener('change',()=>{ST.craftW[sk]=c.checked;save()});
+    l.append(c,document.createTextNode(sk));
+    l.append(el('span','muted',' - '+WSKILL[sk].map(g=>g.replace(' 계열','')).join(' / ')));
+    wh.append(l);
+  }
+  const cv=document.getElementById('conv'); cv.checked=!!ST.conv;
+  cv.onchange=()=>{ST.conv=cv.checked;save()};
+
+  // 무기 시세 표
+  const wb=document.querySelector('#wpnTbl tbody'); wb.textContent='';
+  ST.wpn.forEach((w,i)=>{
+    const tr=document.createElement('tr');
+    tr.append(el('td','pname',w.job));
+    cell(tr,numInput(w.j,v=>{w.j=v;save()},'-'));
+    cell(tr,numInput(w.h,v=>{w.h=v;save()},'-'));
+    const x=el('button','btn','✕'); x.style.padding='4px 9px';
+    x.addEventListener('click',()=>{ST.wpn.splice(i,1);drawPrices();save()});
+    cell(tr,x); wb.append(tr);
+  });
+  const sel=document.getElementById('wpnPick'); const keep=sel.value;
+  sel.textContent='';
+  for(const G of JOBG){
+    const og=document.createElement('optgroup'); og.label=G.g; let n=0;
+    for(const j of G.js){ if(ST.wpn.some(w=>w.job===j))continue;
+      const o=document.createElement('option'); o.value=j; o.textContent=j; og.append(o); n++; }
+    if(n) sel.append(og); }
+  if(keep && [...sel.options].some(o=>o.value===keep)) sel.value=keep;
+}
+
+/* ══ 후보 생성 ══ */
+function candidates(){
+  const s=A(), out={};
+  for(const p of PARTS){
+    if(p==='무기'&&s.drek){ out[p]=[{label:'드래케인',gain:0,mats:{},cash:0}]; continue; }
     if(p==='반지'){
       const r0=Number(s.ring?.[0])||0, r1=Number(s.ring?.[1])||0;
-      const cv=r0+r1, L=[];
-      L.push({label:'변경 없음',gain:0,mats:{},cash:0});
+      const cv=r0+r1, L2=[];
+      L2.push({label:'변경 없음',gain:0,mats:{},cash:0});
       const jP=N(ST.armJ['반지|-']), hP=N(ST.armH['반지|-']);
       const rj=recipe('반지','-','잔영'), rh=recipe('반지','-','해연');
       const jc=Math.max(rjCount(r0),rjCount(r1)), hc=Math.max(rhCount(r0),rhCount(r1));
       for(let add=1; add<=RJMAX+1-jc; add++){
         const g=ringAdd(r0,r1,add,'잔영')-cv; if(g<=0) continue;
-        if(jP>0) L.push({label:`잔영 ${add}개 구매`,gain:g,mats:{},cash:jP*add});
+        if(jP>0) L2.push({label:`잔영 ${add}개 구매`,gain:g,mats:{},cash:jP*add});
         const m={}; for(const q in rj)m[q]=rj[q]*add;
-        L.push({label:`잔영 ${add}개 제작`,gain:g,mats:m,cash:0});
+        L2.push({label:`잔영 ${add}개 제작`,gain:g,mats:m,cash:0});
       }
       for(let add=1; add<=RHMAX+1-hc; add++){
         const g=ringAdd(r0,r1,add,'해연')-cv; if(g<=0) continue;
-        if(hP>0) L.push({label:`해연 ${add}개 구매`,gain:g,mats:{},cash:hP*add});
+        if(hP>0) L2.push({label:`해연 ${add}개 구매`,gain:g,mats:{},cash:hP*add});
         const m={}; for(const q in rh)m[q]=rh[q]*add;
-        L.push({label:`해연 ${add}개 제작`,gain:g,mats:m,cash:0});
+        L2.push({label:`해연 ${add}개 제작`,gain:g,mats:m,cash:0});
       }
-      out[p]=L; continue;
+      out[p]=L2; continue;
     }
     const cv=Math.min(MRmax(p),Number(s.mr[p])||0);
     const [tier,cur]=stageOf(p,cv);
