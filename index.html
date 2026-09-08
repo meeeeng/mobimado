@@ -276,8 +276,7 @@
   <label class="ck" style="padding-bottom:7px"><input type="checkbox" id="drek">드래케인 무기 보유</label>
 </div>
 <div class="scroll"><table id="stTbl"><thead><tr>
-  <th>부위</th><th style="width:150px">종류 / 계열</th><th style="width:130px">현재 마도저항</th>
-  <th style="width:90px">최대</th>
+  <th>부위</th><th style="width:180px">종류 / 계열</th><th style="width:150px">현재 마도저항</th>
 </tr></thead><tbody></tbody></table></div>
 <div style="margin-top:12px" class="fld"><span>기타 마도저항</span>
   <input type="number" id="etc" min="0" class="w-m"></div>
@@ -566,7 +565,7 @@ function drawState(){
   const GRP={'무기':'무기','투구':'방어구','목걸이':'장신구'};
   for(const p of PARTS){
     if(GRP[p]){ const g=document.createElement('tr'); g.className='grp';
-      const td=el('td',null,GRP[p]); td.colSpan=4; g.append(td); tb.append(g); }
+      const td=el('td',null,GRP[p]); td.colSpan=3; g.append(td); tb.append(g); }
     const tr=document.createElement('tr');
     if(p==='반지'){
       if(!Array.isArray(s.ring)) s.ring=[0,0];
@@ -576,7 +575,6 @@ function drawState(){
         cell(r,'-');
         cell(r,numInput(s.ring[i],v=>{ s.ring[i]=v===''?0:v;
           s.mr['반지']=(Number(s.ring[0])||0)+(Number(s.ring[1])||0); updMR(); save(); }));
-        const mx=el('td','num',F(700)); mx.style.color='var(--ink-3)'; r.append(mx);
         tb.append(r);
       }
       continue;
@@ -598,8 +596,6 @@ function drawState(){
     if(p==='무기'&&s.drek){ const td=el('td','num',F(DREK_MR)); td.style.color='var(--gold)';
       td.style.fontWeight='700'; tr.append(td); }
     else cell(tr,numInput(s.mr[p],v=>{s.mr[p]=Math.min(MRmax(p),v===''?0:v);updMR();save()}));
-    const mx=el('td','num',(p==='무기'&&s.drek)?'-':F(MRmax(p)));
-    mx.style.color='var(--ink-3)'; tr.append(mx);
     tb.append(tr);
   }
   document.getElementById('drek').checked=!!s.drek;
