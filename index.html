@@ -204,6 +204,13 @@
   }
   :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 
+  footer{margin-top:26px;padding-top:14px;border-top:1px solid var(--line-soft);
+    font-size:var(--fs-s);color:var(--ink-3);line-height:1.7}
+  footer a{color:var(--gold);text-decoration:none;font-weight:600}
+  footer a:hover{text-decoration:underline}
+  footer .sep2{margin:0 7px;opacity:.5}
+  @media (max-width:640px){ footer .sep2{display:none} footer a{display:inline} }
+
   @media print{
     .card>h2,.chips,.btn,.saved{display:none!important}
     .card,.res{box-shadow:none;break-inside:avoid}
@@ -223,6 +230,14 @@
     <div class="chips" id="slots" style="flex:1"></div>
     <button class="btn dan" id="resetSlot">이 슬롯 초기화</button>
     <button class="btn dan" id="reset">전체 초기화</button>
+  </div>
+</div></div>
+
+<!-- 시세 불러오기 -->
+<div class="card"><div class="body">
+  <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+    <button class="btn" id="loadPrices">거래소 시세 불러오기</button>
+    <span class="muted" id="priceInfo">모비라이프 시세를 매시간 받아옵니다.</span>
   </div>
 </div></div>
 
@@ -302,6 +317,10 @@
   </div>
   <div id="out"></div>
 </div></div>
+
+<footer>
+  시세 제공 <a href="https://mabimobi.life/" target="_blank" rel="noopener">모비라이프</a>
+</footer>
 
 </div>
 
@@ -865,13 +884,49 @@ function render(){
   box.append(inn); out.append(box);
 }
 
+/* ══ 거래소 시세 불러오기 ══ */
+const W2JOB={};  // 무기 시세는 직업명 키
+let AUTO=null;
+async function loadPrices(manual){
+  const info=document.getElementById('priceInfo');
+  try{
+    const r=await fetch('./prices.json?t='+Date.now());
+    if(!r.ok) throw new Error(r.status);
+    AUTO=await r.json();
+  }catch(e){
+    if(manual) info.textContent='시세 파일을 불러오지 못했습니다. 깃허브에 올린 주소에서 열어 주세요.';
+    return;
+  }
+  if(manual) applyPrices();
+  const t=AUTO.updated||AUTO.fetchedAt;
+  info.textContent='마지막 갱신 '+(t?new Date(t).toLocaleString('ko-KR'):'-');
+}
+function applyPrices(){
+  if(!AUTO) return;
+  for(const m in AUTO.mats||{}) if(ST.price[m]!=null) ST.price[m]=AUTO.mats[m];
+  for(const k in AUTO.armJ||{}) ST.armJ[k]=AUTO.armJ[k];
+  for(const k in AUTO.armH||{}) ST.armH[k]=AUTO.armH[k];
+  for(const k in AUTO.accJ||{}) ST.armJ[k+'|-']=AUTO.accJ[k];
+  for(const k in AUTO.accH||{}) ST.armH[k+'|-']=AUTO.accH[k];
+  for(const w of ST.wpn){
+    if(AUTO.wpnJ&&AUTO.wpnJ[w.job]!=null) w.j=AUTO.wpnJ[w.job];
+    if(AUTO.wpnH&&AUTO.wpnH[w.job]!=null) w.h=AUTO.wpnH[w.job];
+  }
+  drawMat(); drawPrices(); save();
+  document.getElementById('priceInfo').textContent=
+    '시세를 적용했습니다. 갱신 '+new Date(AUTO.updated||AUTO.fetchedAt).toLocaleString('ko-KR');
+}
+document.getElementById('loadPrices').addEventListener('click',()=>loadPrices(true));
+
 /* ══ 초기화/렌더 ══ */
 function drawAll(){ drawSlots(); drawMat(); drawPrices(); drawState(); drawExtra(); }
 
 document.querySelectorAll('.card>h2').forEach(h=>h.addEventListener('click',()=>h.parentElement.classList.toggle('closed')));
 document.getElementById('wpnAdd').addEventListener('click',()=>{
   const v=document.getElementById('wpnPick').value; if(!v)return;
-  ST.wpn.push({job:v,j:'',h:''}); drawPrices(); save(); });
+  const nw={job:v,j:'',h:''};
+  if(AUTO){ if(AUTO.wpnJ?.[v]!=null) nw.j=AUTO.wpnJ[v]; if(AUTO.wpnH?.[v]!=null) nw.h=AUTO.wpnH[v]; }
+  ST.wpn.push(nw); drawPrices(); save(); });
 document.getElementById('exAdd').addEventListener('click',()=>{
   A().extras.push({name:'',mr:''}); drawExtra(); save(); });
 for(const k of ['r10','r9'])
@@ -928,5 +983,6 @@ arm(document.getElementById('reset'),'전부 지울까요?',()=>{
   for(const sl of ST.slots){ if(!Array.isArray(sl.ring)) sl.ring=[0,0];
     sl.mr['반지']=(Number(sl.ring[0])||0)+(Number(sl.ring[1])||0); }
   drawAll();
+  loadPrices(false);
 })();
 </script>
