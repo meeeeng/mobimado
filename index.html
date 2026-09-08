@@ -253,10 +253,10 @@
     <div class="st">무기</div>
     <div class="sb">
       <div class="scroll"><table id="wpnTbl"><thead><tr>
-        <th>계열</th><th style="width:120px">잔영 시세</th><th style="width:120px">해연 시세</th>
+        <th>무기</th><th style="width:120px">잔영 시세</th><th style="width:120px">해연 시세</th>
         <th style="width:44px"></th></tr></thead><tbody></tbody></table></div>
       <div class="row-add">
-        <div class="fld"><span>계열 추가</span><select id="wpnPick" class="w-l"></select></div>
+        <div class="fld"><span>무기 추가</span><select id="wpnPick" class="w-l"></select></div>
         <button class="btn" id="wpnAdd">추가</button>
       </div>
     </div>
@@ -415,7 +415,7 @@ const defState=()=>{
   return {
     price:Object.fromEntries(MATS.map(m=>[m.id,m.p])),
     armJ:{}, armH:{}, craftK:{비늘:false,가죽:true,천:true},
-    wpn:[{g:'마법사 계열',j:'',h:''}], conv:false,
+    wpn:[{job:'빙결술사',j:'',h:''}], conv:false,
   craftW:{'대장':false,'목공':true,'매직크래프트':true},
     active:s.id, slots:[s],
   };
@@ -530,10 +530,11 @@ function drawPrices(){
   // 무기
   const wb=document.querySelector('#wpnTbl tbody'); wb.textContent='';
   ST.wpn.forEach((w,i)=>{
-    const tr=document.createElement('tr'); tr.append(el('td',null,w.g));
+    const tr=document.createElement('tr');
+    tr.append(el('td','pname',w.job));
     cell(tr,numInput(w.j,v=>{w.j=v;save()},'-'));
     cell(tr,numInput(w.h,v=>{w.h=v;save()},'-'));
-    const x=el('button','btn','✕'); x.style.padding='4px 9px';
+    const x=el('button','btn','✕'); x.style.padding='4px 9px'; x.title='삭제';
     x.addEventListener('click',()=>{ST.wpn.splice(i,1);drawPrices();save()});
     cell(tr,x); wb.append(tr);
   });
@@ -549,9 +550,14 @@ function drawPrices(){
   }
   const cv=document.getElementById('conv'); cv.checked=!!ST.conv;
   cv.onchange=()=>{ST.conv=cv.checked;save()};
-  const sel=document.getElementById('wpnPick'); sel.textContent='';
-  for(const g of GNAME){ if(ST.wpn.some(w=>w.g===g))continue;
-    const o=document.createElement('option'); o.value=g; o.textContent=g; sel.append(o); }
+  const sel=document.getElementById('wpnPick'); const keep=sel.value;
+  sel.textContent='';
+  for(const G of JOBG){
+    const og=document.createElement('optgroup'); og.label=G.g; let n=0;
+    for(const j of G.js){ if(ST.wpn.some(w=>w.job===j))continue;
+      const o=document.createElement('option'); o.value=j; o.textContent=j; og.append(o); n++; }
+    if(n) sel.append(og); }
+  if(keep && [...sel.options].some(o=>o.value===keep)) sel.value=keep;
 }
 
 /* ══ 현재 상태 ══ */
@@ -664,13 +670,14 @@ function candidates(){
 
     // 종류/계열 후보
     let variants;
-    if(p==='무기') variants=ST.wpn.map(w=>({k:w.g,j:N(w.j),h:N(w.h),
-        craft:!!(ST.craftW||{})[W2S[w.g]],
-        jOK:ST.conv||JOB2G[s.job]===w.g}));
+    if(p==='무기') variants=ST.wpn.map(w=>({k:JOB2G[w.job], nm:w.job,
+        j:N(w.j),h:N(w.h),
+        craft:!!(ST.craftW||{})[W2S[JOB2G[w.job]]],
+        jOK:ST.conv||w.job===s.job}));
     else if(ARMP.includes(p)) variants=KINDS.map(k=>({k,j:N(ST.armJ[p+'|'+k]),h:N(ST.armH[p+'|'+k]),
         craft:ST.craftK[k],jOK:true}));
     else variants=[{k:'-',j:N(ST.armJ[BASEPART(p)+'|-']),h:N(ST.armH[BASEPART(p)+'|-']),craft:true,jOK:true}];
-    const tag=v=>v.k==='-'?'':v.k+' ';
+    const tag=v=>v.k==='-'?'':(v.nm||v.k)+' ';
 
     // 상태를 (등급, 횟수)로 진행시키는 함수 — 잔영은 11에서 멈추고, 해연 아이템으로 해연 단계 진입
     // 보유분 자동 소진
@@ -679,7 +686,7 @@ function candidates(){
 
     for(const v of variants){
       const rj=recipe(p,v.k,'잔영'), rh=recipe(p,v.k,'해연');
-      const hOK = p!=='무기' || ST.conv || JOB2G[s.job]===v.k;
+      const hOK = p!=='무기' || ST.conv || (v.lbl===s.job);
       // ① 잔영 추가 (현재 잔영 단계일 때만)
       if(bt==='잔영'){
         for(let add=1; bn+add<=JMAX; add++){
@@ -847,7 +854,7 @@ function drawAll(){ drawSlots(); drawMat(); drawPrices(); drawState(); drawExtra
 document.querySelectorAll('.card>h2').forEach(h=>h.addEventListener('click',()=>h.parentElement.classList.toggle('closed')));
 document.getElementById('wpnAdd').addEventListener('click',()=>{
   const v=document.getElementById('wpnPick').value; if(!v)return;
-  ST.wpn.push({g:v,j:'',h:'',craft:true}); drawPrices(); save(); });
+  ST.wpn.push({job:v,j:'',h:''}); drawPrices(); save(); });
 document.getElementById('exAdd').addEventListener('click',()=>{
   A().extras.push({name:'',mr:''}); drawExtra(); save(); });
 for(const k of ['r10','r9'])
@@ -884,7 +891,9 @@ arm(document.getElementById('reset'),'전부 지울까요?',()=>{
            craftK:Object.assign(base.craftK,d.craftK||{}),
            craftW:Object.assign({'대장':false,'목공':true,'매직크래프트':true},d.craftW||{}),
            conv:!!d.conv,
-           wpn:Array.isArray(d.wpn)&&d.wpn.length?d.wpn:base.wpn,
+           wpn:(Array.isArray(d.wpn)&&d.wpn.length
+                 ? d.wpn.map(w=>w.job?w:{job:(GBY[w.g]?.js[0]||'빙결술사'),j:w.j||'',h:w.h||''})
+                 : base.wpn),
            slots:(d.slots||[]).map(x=>Object.assign(newSlot(x.name||'슬롯'),x,
              {own:Object.assign(Object.fromEntries(MID.map(m=>[m,0])),x.own||{}),
               kind:Object.assign(Object.fromEntries(ARMP.map(p=>[p,'천'])),x.kind||{}),
