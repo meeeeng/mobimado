@@ -666,10 +666,16 @@ function candidates(){
 
     // 종류/계열 후보
     let variants;
-    if(p==='무기') variants=ST.wpn.map(w=>({k:JOB2G[w.job], nm:w.job,
+    if(p==='무기'){
+      variants=ST.wpn.map(w=>({k:JOB2G[w.job], nm:w.job,
         j:N(w.j),h:N(w.h),
         craft:!!(ST.craftW||{})[W2S[JOB2G[w.job]]],
         jOK:ST.conv||w.job===s.job}));
+      // 본인 직업은 시세가 없어도 제작 후보로 항상 포함
+      if(!variants.some(v=>v.nm===s.job)&&JOB2G[s.job])
+        variants.push({k:JOB2G[s.job], nm:s.job, j:0, h:0,
+          craft:!!(ST.craftW||{})[W2S[JOB2G[s.job]]], jOK:true});
+    }
     else if(ARMP.includes(p)) variants=KINDS.map(k=>({k,j:N(ST.armJ[p+'|'+k]),h:N(ST.armH[p+'|'+k]),
         craft:ST.craftK[k],jOK:true}));
     else variants=[{k:'-',j:N(ST.armJ[BASEPART(p)+'|-']),h:N(ST.armH[BASEPART(p)+'|-']),craft:true,jOK:true}];
