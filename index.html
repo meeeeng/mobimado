@@ -361,11 +361,10 @@ const rjCount=v=>{v=Number(v)||0; return v<=0||v>=420?0:Math.max(1,Math.min(RJMA
 const rhCount=v=>{v=Number(v)||0; return v<420?0:Math.min(RHMAX,Math.round((v-420)/14)+1);};
 /* 감정 k회 추가 후 두 반지 합계 */
 function ringAdd(r0,r1,k,grade){
-  const hi=Math.max(r0,r1), LADf=grade==='해연'?RH:RJ;
+  if(k<=0) return r0+r1;
+  const LADf=grade==='해연'?RH:RJ;
   const c=grade==='해연'?Math.max(rhCount(r0),rhCount(r1))
                         :Math.max(rjCount(r0),rjCount(r1));
-  if(k<=0) return r0+r1;
-  if(k===1) return LADf(c+1)+hi;
   return LADf(c+k)+LADf(c+k-1);
 }
 const MRmax=p=>p==='반지'?RH(RHMAX)*2:MRat(p,'해연',HMAX);
@@ -669,7 +668,9 @@ function candidates(){
         const m={}; for(const q in rj)m[q]=rj[q]*add;
         L2.push({label:`잔영 ${add}개 제작`,gain:g,mats:m,cash:0});
       }
-      for(let add=1; add<=RHMAX+1-hc; add++){
+      // 해연은 두 반지 모두 420(잔영 최대)을 채운 뒤에만 의미 있음
+      const canHaeon = Math.min(r0,r1)>=420;
+      for(let add=1; canHaeon && add<=RHMAX+1-hc; add++){
         const g=ringAdd(r0,r1,add,'해연')-cv; if(g<=0) continue;
         if(hP>0) L2.push({label:`해연 ${add}개 구매`,gain:g,mats:{},cash:hP*add});
         const m={}; for(const q in rh)m[q]=rh[q]*add;
